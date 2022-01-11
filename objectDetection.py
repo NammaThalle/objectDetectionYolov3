@@ -34,25 +34,14 @@ modelWeights = 'misc/yolov3.weights'
 # modelConfiguration = 'misc/yolov3-tiny.cfg'
 # modelWeights = 'misc/yolov3-tiny.weights'
 
-# to stream in from a video
-cap = cv2.VideoCapture("52M27S_1640863347.mp4")
- 
-# open the file and read the class names 
-with open(classFile, 'rt') as f:
-    classNames = f.read().strip('\n').split('\n')
-
-# create neural network using the model configurations and
-# set the different targets
-net = cv2.dnn.readNetFromDarknet(modelConfiguration, modelWeights)
-net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-
 # function to find the objects in an image
 def findObjects(outputs, image):
     oHeight, oWidth, oCenter = image.shape
     boundingBox = []
     classIds = []
     confidenceLevels = []
+
+    global classNames
 
     for output in outputs:
         for detection in output:
@@ -78,45 +67,68 @@ def findObjects(outputs, image):
         cv2.putText(image, f'{classNames[classIds[i]].upper()} {int(confidenceLevels[i]*100)}%',
                     (x, y-h-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6,(255, 0, 255), 2)
 
-# loop till user inputs a q
-while True:
-    success, img = cap.read()
+def main():
 
-    if img is None:
-        print("wrong path")
+    prev_frame_time = 0
+    new_frame_time = 0
 
-    # img = cv2.flip(img, 1)
-    new_frame_time = time.time()
+    global classNames
 
-    # Calculating the fps
-    # fps will be number of frame processed in given time frame
-    # since their will be most of time error of 0.001 second
-    # we will be subtracting it to get more accurate result
-    fps = 1/(new_frame_time-prev_frame_time)
-    prev_frame_time = new_frame_time
+    # to stream in from a video
+    cap = cv2.VideoCapture("52M27S_1640863347.mp4")
+    
+    # open the file and read the class names 
+    with open(classFile, 'rt') as f:
+        classNames = f.read().strip('\n').split('\n')
 
-    # converting the fps into integer
-    fps = int(fps)
- 
-    # converting the fps to string so that we can display it on frame
-    # by using putText function
-    fps = str(fps)
- 
-    # putting the FPS count on the frame
-    cv2.putText(img, fps, (7, 120), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
+    # create neural network using the model configurations and
+    # set the different targets
+    net = cv2.dnn.readNetFromDarknet(modelConfiguration, modelWeights)
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
-    blob = cv2.dnn.blobFromImage(img, 1/255, (width, height), [0,0,0], 1, crop = False)
-    net.setInput(blob)
+    # loop till user inputs a q
+    while True:
+        success, img = cap.read()
 
-    totalLayers = net.getLayerNames()
+        if img is None:
+            print("wrong path")
 
-    outputLayers = [totalLayers[i-1] for i in net.getUnconnectedOutLayers()] 
-    outputs = net.forward(outputLayers)
+        # img = cv2.flip(img, 1)
+        new_frame_time = time.time()
 
-    findObjects(outputs, img)
+        # Calculating the fps
+        # fps will be number of frame processed in given time frame
+        # since their will be most of time error of 0.001 second
+        # we will be subtracting it to get more accurate result
+        fps = 1/(new_frame_time-prev_frame_time)
+        prev_frame_time = new_frame_time
 
-    cv2.imshow('Image', img)
+        # converting the fps into integer
+        fps = int(fps)
+    
+        # converting the fps to string so that we can display it on frame
+        # by using putText function
+        fps = str(fps)
+    
+        # putting the FPS count on the frame
+        cv2.putText(img, fps, (7, 120), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
 
-    # if user inputs q, break
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        blob = cv2.dnn.blobFromImage(img, 1/255, (width, height), [0,0,0], 1, crop = False)
+        net.setInput(blob)
+
+        totalLayers = net.getLayerNames()
+
+        outputLayers = [totalLayers[i-1] for i in net.getUnconnectedOutLayers()] 
+        outputs = net.forward(outputLayers)
+
+        findObjects(outputs, img)
+
+        cv2.imshow('Image', img)
+
+        # if user inputs q, break
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+if __name__=="__main__":
+    main()
