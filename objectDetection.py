@@ -76,9 +76,6 @@ def findObjects(outputs, image):
 
 def main():
 
-    prev_frame_time = 0
-    new_frame_time = 0
-
     global classNames
 
     # to stream in from a video
@@ -104,7 +101,9 @@ def main():
 
         if image is None or success is False:
             APP_ERROR("IMAGE READ FAILED")
+            break
 
+        image = cv2.resize(image, (int(image.shape[1] * 0.5),int(image.shape[0] * 0.5)))
         blob = cv2.dnn.blobFromImage(image, 1/255, (width, height), [0,0,0], 1, crop = False)
         net.setInput(blob)
 
@@ -122,6 +121,7 @@ def main():
             APP_LOG("STOPPING VIDEO CAPTURE")
             cap.release()
             APP_LOG("STOPPED VIDEO CAPTURE")
+            cv2.destroyAllWindows()
             break
 
         fps.update()
