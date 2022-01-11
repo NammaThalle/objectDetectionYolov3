@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import time
 
+import logging
+
 # to stream in from a webcam
 # cap = cv2.VideoCapture(-1)
 
@@ -34,6 +36,12 @@ modelWeights = 'misc/yolov3.weights'
 # modelConfiguration = 'misc/yolov3-tiny.cfg'
 # modelWeights = 'misc/yolov3-tiny.weights'
 
+def APP_LOG (logString):
+    print("[ LOG ] : "+ logString)
+
+def APP_ERROR(errorString):
+    print("[ ERROR ] "+ errorString)
+
 # function to find the objects in an image
 def findObjects(outputs, image):
     oHeight, oWidth, oCenter = image.shape
@@ -57,7 +65,7 @@ def findObjects(outputs, image):
                 confidenceLevels.append(float(confidenceLevel))
 
     indices = cv2.dnn.NMSBoxes(boundingBox, confidenceLevels, CONFIDENCE_THRESHOLD, NMS_THRESHOLD)
-    print(indices)
+    APP_LOG("OBJECTS DETECTED : " + str(len(indices)))
 
     for i in indices:
         # i = i[0]
@@ -75,26 +83,29 @@ def main():
     global classNames
 
     # to stream in from a video
+    APP_LOG("STARTING VIDEO CAPTURE")
     cap = cv2.VideoCapture("52M27S_1640863347.mp4")
-    
+    APP_LOG("STARTED VIDEO CAPTURE")
+
     # open the file and read the class names 
     with open(classFile, 'rt') as f:
         classNames = f.read().strip('\n').split('\n')
 
     # create neural network using the model configurations and
     # set the different targets
+    APP_LOG("LOADING NN MODEL")
     net = cv2.dnn.readNetFromDarknet(modelConfiguration, modelWeights)
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
     # loop till user inputs a q
     while True:
-        success, img = cap.read()
+        success, image = cap.read()
 
-        if img is None:
-            print("wrong path")
+        if image is None or success is False:
+            APP_ERROR("IMAGE READ FAILED")
 
-        # img = cv2.flip(img, 1)
+        # image = cv2.flip(image, 1)
         new_frame_time = time.time()
 
         # Calculating the fps
@@ -112,9 +123,9 @@ def main():
         fps = str(fps)
     
         # putting the FPS count on the frame
-        cv2.putText(img, fps, (7, 120), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(image, fps, (7, 120), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
 
-        blob = cv2.dnn.blobFromImage(img, 1/255, (width, height), [0,0,0], 1, crop = False)
+        blob = cv2.dnn.blobFromImage(image, 1/255, (width, height), [0,0,0], 1, crop = False)
         net.setInput(blob)
 
         totalLayers = net.getLayerNames()
@@ -122,12 +133,15 @@ def main():
         outputLayers = [totalLayers[i-1] for i in net.getUnconnectedOutLayers()] 
         outputs = net.forward(outputLayers)
 
-        findObjects(outputs, img)
+        findObjects(outputs, image)
 
-        cv2.imshow('Image', img)
+        cv2.imshow('Image', image)
 
         # if user inputs q, break
         if cv2.waitKey(1) & 0xFF == ord('q'):
+            APP_LOG("STOPPING VIDEO CAPTURE")
+            cap.release()
+            APP_LOG("STOPPED VIDEO CAPTURE")
             break
 
 if __name__=="__main__":
