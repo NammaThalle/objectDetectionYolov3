@@ -1,8 +1,7 @@
 import cv2
 import numpy as np
 import time
-
-import logging
+from imutils.video import FPS
 
 # to stream in from a webcam
 # cap = cv2.VideoCapture(-1)
@@ -87,6 +86,7 @@ def main():
     cap = cv2.VideoCapture("52M27S_1640863347.mp4")
     APP_LOG("STARTED VIDEO CAPTURE")
 
+    fps = FPS().start()
     # open the file and read the class names 
     with open(classFile, 'rt') as f:
         classNames = f.read().strip('\n').split('\n')
@@ -104,26 +104,6 @@ def main():
 
         if image is None or success is False:
             APP_ERROR("IMAGE READ FAILED")
-
-        # image = cv2.flip(image, 1)
-        new_frame_time = time.time()
-
-        # Calculating the fps
-        # fps will be number of frame processed in given time frame
-        # since their will be most of time error of 0.001 second
-        # we will be subtracting it to get more accurate result
-        fps = 1/(new_frame_time-prev_frame_time)
-        prev_frame_time = new_frame_time
-
-        # converting the fps into integer
-        fps = int(fps)
-    
-        # converting the fps to string so that we can display it on frame
-        # by using putText function
-        fps = str(fps)
-    
-        # putting the FPS count on the frame
-        cv2.putText(image, fps, (7, 120), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
 
         blob = cv2.dnn.blobFromImage(image, 1/255, (width, height), [0,0,0], 1, crop = False)
         net.setInput(blob)
@@ -144,5 +124,9 @@ def main():
             APP_LOG("STOPPED VIDEO CAPTURE")
             break
 
+        fps.update()
+
+    fps.stop()
+    APP_LOG(" APPROX FPS : {:.2f}".format(fps.fps()))
 if __name__=="__main__":
     main()
