@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
-import time
+
+import threading
+import queue
+
 from imutils.video import FPS
 
 # to stream in from a webcam
@@ -35,20 +38,40 @@ modelWeights = 'misc/yolov3.weights'
 # modelConfiguration = 'misc/yolov3-tiny.cfg'
 # modelWeights = 'misc/yolov3-tiny.weights'
 
+# variable to store the fps details of the video
+fps = None
 def APP_LOG (logString):
     print("[ LOG ] : "+ logString)
 
 def APP_ERROR(errorString):
     print("[ ERROR ] "+ errorString)
 
+def imagePreprocess(cap, frameQueue, blobQueue, width, height):
+    global fps
+    while cap.isOpened():
+        success, frame = cap.read()
+
+        if frame is None or success is False:
+            APP_ERROR("IMAGE READ FAILED")
+            break
+
+        fps = FPS().start()
+        frame = cv2.resize(frame, (int(frame.shape[1] * 0.5),int(frame.shape[0] * 0.5)))
+
+        blob = cv2.dnn.blobFromImage(frame, 1/255, (width, height), [0,0,0], 1, crop = False)
+
+        frameQueue.put(frame)
+        blobQueue.put(blob)
+
 # function to find the objects in an image
-def findObjects(outputs, image):
-    oHeight, oWidth, oCenter = image.shape
+def findObjects(outputs, frame):
+    oHeight, oWidth, oCenter = frame.shape
     boundingBox = []
     classIds = []
     confidenceLevels = []
 
     global classNames
+    global fps
 
     for output in outputs:
         for detection in output:
@@ -70,20 +93,53 @@ def findObjects(outputs, image):
         # i = i[0]
         box = boundingBox[i]
         x, y, w, h = box[0], box[0], box[2], box[3]
-        cv2.rectangle(image, (x,y), (x+w, y-h), (255, 0, 255), 2)
-        cv2.putText(image, f'{classNames[classIds[i]].upper()} {int(confidenceLevels[i]*100)}%',
+        cv2.rectangle(frame, (x,y), (x+w, y-h), (255, 0, 255), 2)
+        cv2.putText(frame, f'{classNames[classIds[i]].upper()} {int(confidenceLevels[i]*100)}%',
                     (x, y-h-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6,(255, 0, 255), 2)
+
+def imageProcessing(cap, net, frameQueue, blobQueue):
+
+    global fps
+
+    # loop till user inputs a q
+    while True:
+        blob = blobQueue.get()
+
+        net.setInput(blob)
+
+        totalLayers = net.getLayerNames()
+
+        outputLayers = [totalLayers[i-1] for i in net.getUnconnectedOutLayers()] 
+        outputs = net.forward(outputLayers)
+
+        frame = frameQueue.get()
+        findObjects(outputs, frame)
+
+        cv2.imshow('Image', frame)
+
+        fps.update()
+
+        # if user inputs q, break
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break        
+
+    fps.stop()
+    APP_LOG(" APPROX FPS : {:.2f}".format(fps.fps()))
 
 def main():
 
     global classNames
+    global fps
 
     # to stream in from a video
     APP_LOG("STARTING VIDEO CAPTURE")
     cap = cv2.VideoCapture("52M27S_1640863347.mp4")
+    cap.open("52M27S_1640863347.mp4")
     APP_LOG("STARTED VIDEO CAPTURE")
 
-    fps = FPS().start()
+    frameQueue = queue.Queue(maxsize=4)
+    blobQueue = queue.Queue(maxsize=4)
+
     # open the file and read the class names 
     with open(classFile, 'rt') as f:
         classNames = f.read().strip('\n').split('\n')
@@ -95,38 +151,21 @@ def main():
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
-    # loop till user inputs a q
-    while True:
-        success, image = cap.read()
+    imagePreprocessThread = threading.Thread(target=imagePreprocess, 
+                    args=(cap, frameQueue, blobQueue, width, height))
+    imageProcessThread = threading.Thread(target = imageProcessing,
+                    args=(cap, net, frameQueue, blobQueue))
 
-        if image is None or success is False:
-            APP_ERROR("IMAGE READ FAILED")
-            break
+    imagePreprocessThread.start()                    
+    # imageProcessThread.start()
+    imageProcessing(cap, net, frameQueue, blobQueue)
+    imagePreprocessThread.join()
+    # imageProcessThread.join()
 
-        image = cv2.resize(image, (int(image.shape[1] * 0.5),int(image.shape[0] * 0.5)))
-        blob = cv2.dnn.blobFromImage(image, 1/255, (width, height), [0,0,0], 1, crop = False)
-        net.setInput(blob)
+    APP_LOG("STOPPING VIDEO CAPTURE")
+    cap.release()
+    APP_LOG("STOPPED VIDEO CAPTURE")
+    cv2.destroyAllWindows()
 
-        totalLayers = net.getLayerNames()
-
-        outputLayers = [totalLayers[i-1] for i in net.getUnconnectedOutLayers()] 
-        outputs = net.forward(outputLayers)
-
-        findObjects(outputs, image)
-
-        cv2.imshow('Image', image)
-
-        # if user inputs q, break
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            APP_LOG("STOPPING VIDEO CAPTURE")
-            cap.release()
-            APP_LOG("STOPPED VIDEO CAPTURE")
-            cv2.destroyAllWindows()
-            break
-
-        fps.update()
-
-    fps.stop()
-    APP_LOG(" APPROX FPS : {:.2f}".format(fps.fps()))
 if __name__=="__main__":
     main()
