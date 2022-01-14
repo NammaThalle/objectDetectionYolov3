@@ -3,6 +3,7 @@ import numpy as np
 
 import threading
 import queue
+import time
 
 from imutils.video import FPS
 
@@ -31,12 +32,12 @@ classNames = []
 
 # configuration and weight file paths for the respective yolov3 network
 # yolov3-320 model
-modelConfiguration = 'misc/yolov3.cfg'
-modelWeights = 'misc/yolov3.weights'
+# modelConfiguration = 'misc/yolov3.cfg'
+# modelWeights = 'misc/yolov3.weights'
 
 # yolov3-tiny model
-# modelConfiguration = 'misc/yolov3-tiny.cfg'
-# modelWeights = 'misc/yolov3-tiny.weights'
+modelConfiguration = 'misc/yolov3-tiny.cfg'
+modelWeights = 'misc/yolov3-tiny.weights'
 
 # variable to store the fps details of the video
 fps = None
@@ -47,15 +48,15 @@ def APP_ERROR(errorString):
     print("[ ERROR ] "+ errorString)
 
 def imagePreprocess(cap, frameQueue, blobQueue, width, height):
-    global fps
     while cap.isOpened():
         success, frame = cap.read()
 
-        if frame is None or success is False:
+        if not success:
             APP_ERROR("IMAGE READ FAILED")
+            frameQueue.put(None)
+            blobQueue.put(None)
             break
 
-        fps = FPS().start()
         frame = cv2.resize(frame, (int(frame.shape[1] * 0.5),int(frame.shape[0] * 0.5)))
 
         blob = cv2.dnn.blobFromImage(frame, 1/255, (width, height), [0,0,0], 1, crop = False)
@@ -103,7 +104,11 @@ def imageProcessing(cap, net, frameQueue, blobQueue):
 
     # loop till user inputs a q
     while True:
+        frame = frameQueue.get()
         blob = blobQueue.get()
+
+        if frame is None:
+            break
 
         net.setInput(blob)
 
@@ -112,7 +117,6 @@ def imageProcessing(cap, net, frameQueue, blobQueue):
         outputLayers = [totalLayers[i-1] for i in net.getUnconnectedOutLayers()] 
         outputs = net.forward(outputLayers)
 
-        frame = frameQueue.get()
         findObjects(outputs, frame)
 
         cv2.imshow('Image', frame)
@@ -123,9 +127,6 @@ def imageProcessing(cap, net, frameQueue, blobQueue):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break        
 
-    fps.stop()
-    APP_LOG(" APPROX FPS : {:.2f}".format(fps.fps()))
-
 def main():
 
     global classNames
@@ -134,7 +135,7 @@ def main():
     # to stream in from a video
     APP_LOG("STARTING VIDEO CAPTURE")
     cap = cv2.VideoCapture("52M27S_1640863347.mp4")
-    cap.open("52M27S_1640863347.mp4")
+    time.sleep(0.5)
     APP_LOG("STARTED VIDEO CAPTURE")
 
     frameQueue = queue.Queue(maxsize=4)
@@ -151,21 +152,24 @@ def main():
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
+    fps = FPS().start()
+
     imagePreprocessThread = threading.Thread(target=imagePreprocess, 
                     args=(cap, frameQueue, blobQueue, width, height))
-    imageProcessThread = threading.Thread(target = imageProcessing,
-                    args=(cap, net, frameQueue, blobQueue))
 
-    imagePreprocessThread.start()                    
-    # imageProcessThread.start()
+    imagePreprocessThread.start()           
+
     imageProcessing(cap, net, frameQueue, blobQueue)
-    imagePreprocessThread.join()
-    # imageProcessThread.join()
+    
+    # imagePreprocessThread.join()
+    
+    fps.stop()
+    APP_LOG(" APPROX FPS : {:.2f}".format(fps.fps()))
 
     APP_LOG("STOPPING VIDEO CAPTURE")
     cap.release()
     APP_LOG("STOPPED VIDEO CAPTURE")
     cv2.destroyAllWindows()
-
+    
 if __name__=="__main__":
     main()
